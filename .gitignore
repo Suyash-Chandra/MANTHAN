@@ -1,0 +1,17 @@
+# Python
+backend/venv/
+__pycache__/
+*.py[cod]
+
+# JavaScript
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Runtime data and secrets
+.env
+.env.*
+!*.example
+data/raw/
+data/processed/
+feedback/

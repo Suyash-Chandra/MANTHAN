@@ -1,0 +1,23 @@
+import { useEffect, useState } from 'react';
+import { Download, MapPin, Radio, ShieldAlert, SlidersHorizontal } from 'lucide-react';
+import { Sidebar } from './components/layout/Sidebar';
+import { AnalyzeView, type Detection } from './components/views/AnalyzeView';
+import './index.css';
+const API = 'http://localhost:8000';
+function App() {
+  const [currentView, setCurrentView] = useState('analyze'); const [detections, setDetections] = useState<Detection[]>([]); const [notice, setNotice] = useState('LOCAL DEMO ENGINE · SYNTHETIC INFERENCE');
+  useEffect(() => { void refresh(); }, []);
+  async function refresh() { try { const r = await fetch(`${API}/api/detections`); setDetections(await r.json() as Detection[]); } catch { setNotice('API OFFLINE · START THE LOCAL FASTAPI SERVICE'); } }
+  async function review(item: Detection, action: string) { try { const r = await fetch(`${API}/api/detections/${item.detection_id}/feedback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) }); const updated = await r.json() as Detection; setDetections((items) => items.map((entry) => entry.detection_id === updated.detection_id ? updated : entry)); } catch { setNotice('REVIEW ACTION COULD NOT REACH LOCAL API'); } }
+  const shell = (title: string, eyebrow: string, children: React.ReactNode) => <section className="page"><div className="page-head"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><span className="status-chip">{notice}</span></div>{children}</section>;
+  const detectionRows = <div className="data-table"><div className="table-row table-head"><span>ID</span><span>CLASS</span><span>MODE</span><span>STATUS</span><span>POSITION</span></div>{detections.length ? detections.map((d) => <button className="table-row" key={d.detection_id} onClick={() => setCurrentView('analyze')}><span className="mono accent">{d.detection_id}</span><span>{d.class_name}</span><span className="muted">DEMO</span><span className="status-new">{d.status}</span><span className="muted">NO METADATA</span></button>) : <p className="empty-row">No detections yet. Upload a sonar image in Analyze.</p>}</div>;
+  let view: React.ReactNode;
+  if (currentView === 'analyze') view = <AnalyzeView api={API} onDetection={(d) => { setDetections((items) => [d, ...items.filter((x) => x.detection_id !== d.detection_id)]); setNotice('DEMO RESULT READY · VERIFY BEFORE ACTING'); }} onReview={review} />;
+  else if (currentView === 'mission') view = shell('Mission control', 'MISSION / 07', <><div className="mission-grid"><article><p>Survey identity</p><strong>THUNDER BAY — DEMO</strong><small>Built-in local workspace · no field data connected</small></article><article><p>Pipeline status</p><strong>READY FOR INPUT</strong><small>Validate → preprocess → synthetic demo candidate</small></article><article><p>Detection register</p><strong>{detections.length}</strong><small>Current local session</small></article></div><div className="sequence"><span>OBSERVE</span><i /> <span>DETECT</span><i /> <span>VERIFY</span><i /> <span>LOCATE</span><i /> <span>ACT</span></div></>);
+  else if (currentView === 'detections') view = shell('Detection register', 'REVIEW / LOCAL SESSION', detectionRows);
+  else if (currentView === 'map') view = shell('Survey map', 'GEOLOCATION', <div className="map-empty"><MapPin size={32}/><h3>Geolocation unavailable</h3><p>Upload positional metadata with a future survey import. SONARIS will not invent coordinates for uploaded imagery.</p></div>);
+  else if (currentView === 'reports') view = shell('Evidence exports', 'REPORTS / CURRENT SESSION', <div className="report-grid"><article><Download/><h3>Structured JSON</h3><p>Full local detection register, including inference mode and review state.</p><a href={`${API}/api/report/json`}>DOWNLOAD JSON</a></article><article><Download/><h3>Review CSV</h3><p>Portable tabular export for investigation workflows.</p><a href={`${API}/api/report/csv`}>DOWNLOAD CSV</a></article></div>);
+  else view = shell('Processing configuration', 'SETTINGS / DEMO PROFILE', <div className="config"><SlidersHorizontal/><div><h3>Sonar preprocessing</h3><p>Grayscale normalization · median speckle reduction · CLAHE contrast enhancement</p></div><Radio/><div><h3>Inference profile</h3><p>Demo detector only. No trained model weights or validated benchmark are currently installed.</p></div></div>);
+  return <div className="app"><Sidebar currentView={currentView} setCurrentView={setCurrentView}/><main>{view}</main><footer><ShieldAlert size={13}/> Demo output is synthetic and must be manually verified before any operational decision.</footer></div>;
+}
+export default App;
