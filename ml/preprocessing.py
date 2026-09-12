@@ -26,9 +26,15 @@ class SonarPreprocessor:
     def preprocess(self, image: np.ndarray) -> np.ndarray:
         # 1. Grayscale normalization
         if len(image.shape) == 3:
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            conversion = cv2.COLOR_BGRA2GRAY if image.shape[2] == 4 else cv2.COLOR_BGR2GRAY
+            gray = cv2.cvtColor(image, conversion)
         else:
             gray = image.copy()
+
+        # OpenCV's median/CLAHE pipeline is deliberately run in 8-bit space.
+        # Preserve the relative dynamic range of 16-bit sonar exports first.
+        if gray.dtype != np.uint8:
+            gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
             
         # 2. Denoising (Median filter for speckle reduction)
         denoised = cv2.medianBlur(gray, self.config["median_blur_ksize"])

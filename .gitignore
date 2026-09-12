@@ -15,3 +15,8 @@ frontend/dist/
 data/raw/
 data/processed/
 feedback/
+
+# Reproducible local ML artifacts
+ml/runs/
+ml/.ultralytics/
+*.pt

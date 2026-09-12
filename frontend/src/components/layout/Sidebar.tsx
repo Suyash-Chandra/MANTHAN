@@ -7,7 +7,7 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { id: 'mission', label: 'Mission', icon: Target },
+  { id: 'mission', label: 'Home', icon: Target },
   { id: 'analyze', label: 'Analyze', icon: Activity },
   { id: 'detections', label: 'Detections', icon: Database },
   { id: 'map', label: 'Survey Map', icon: MapIcon },
@@ -21,7 +21,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView })
       <div style={styles.brand}>
         <div style={styles.logo}></div>
         <div>
-          <h1 style={styles.title}>SONARIS</h1>
+          <h1 style={styles.title}>MANTHAN</h1>
           <p style={styles.tagline}>Sonar Intelligence</p>
         </div>
       </div>

@@ -31,10 +31,48 @@ class FeedbackRequest(BaseModel):
     action: Literal["CONFIRM", "REJECT", "RECOVERY_QUEUE", "RECLASSIFY"]
     new_class: str | None = None
 
-def demo_detection(image_id: str, width: int, height: int) -> dict:
-    result = detector.predict(image_id, image_size=(width, height))[0]
-    result.update({"image_id": image_id, "status": "NEW", "inference_mode": "DEMO_SYNTHETIC", "model_version": "Sonaris Demo Detector 0.2", "geolocation_status": "unavailable — no positional metadata supplied", "latitude": None, "longitude": None, "timestamp": datetime.now(timezone.utc).isoformat()})
-    return result
+import random
+
+def get_demo_detections(image: np.ndarray, image_id: str) -> list[dict]:
+    results = detector.predict(image, image_id)
+    
+    # Deterministic base coordinate for this specific sonar image
+    import struct
+    hash_val = int(hashlib.md5(image_id.encode()).hexdigest()[:8], 16)
+    
+    # Base location in Thunder Bay: 45.0 N, -83.0 W
+    base_lat = 45.0 + ((hash_val % 1000) / 10000.0) - 0.05
+    base_lon = -83.0 + (((hash_val // 1000) % 1000) / 10000.0) - 0.05
+    
+    h_img, w_img = image.shape[:2]
+    
+    for i, res in enumerate(results):
+        # Extract pixel center of the anomaly
+        bbox = res.get("bbox", [0, 0, 0, 0])
+        cx = (bbox[0] + bbox[2]) / 2.0
+        cy = (bbox[1] + bbox[3]) / 2.0
+        
+        # Offset lat/lon based on pixel position (assuming 1 pixel = ~5cm)
+        # 1 degree lat = ~111,000 meters
+        lat_offset = -((cy - h_img/2) * 0.0000005)
+        lon_offset = ((cx - w_img/2) * 0.0000005)
+        
+        lat = base_lat + lat_offset
+        lon = base_lon + lon_offset
+        
+        meta = res.pop("_inference_meta", {})
+        
+        res.update({
+            "image_id": image_id, 
+            "status": "NEW", 
+            "inference_mode": meta.get("mode", "DEMO_SYNTHETIC"), 
+            "model_version": meta.get("version", "Sonaris Demo Detector 0.2"), 
+            "geolocation_status": "Simulated Demo Coordinate", 
+            "latitude": round(lat, 6), 
+            "longitude": round(lon, 6), 
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+    return results
 
 @app.get("/")
 def root() -> dict:
@@ -51,16 +89,22 @@ async def analyze(file: UploadFile = File(...)) -> dict:
     blob = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(blob) > MAX_UPLOAD_BYTES:
         raise HTTPException(413, "Upload exceeds 25 MB limit.")
+    
+    import numpy as np
     image = cv2.imdecode(np.frombuffer(blob, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
     if image is None:
         raise HTTPException(422, "The uploaded file is not a readable image.")
+    
     height, width = image.shape[:2]
     image_id = hashlib.sha256(blob).hexdigest()[:12]
     processed = preprocessor.preprocess(image)
-    detection = demo_detection(image_id, width, height)
-    detection.update({"preprocessing": preprocessor.describe(), "processed_shape": list(processed.shape[:2])})
-    DETECTIONS[detection["detection_id"]] = detection
-    return {"status": "success", "mode": "DEMO_SYNTHETIC", "disclaimer": "Synthetic demo result, not a scientific prediction or trained-model inference.", "processing_time_ms": 0, "detections": [detection]}
+    
+    detections = get_demo_detections(processed, image_id)
+    for d in detections:
+        d.update({"preprocessing": preprocessor.describe(), "processed_shape": list(processed.shape[:2])})
+        DETECTIONS[d["detection_id"]] = d
+        
+    return {"status": "success", "mode": "DEMO_SYNTHETIC", "disclaimer": "Synthetic demo result", "processing_time_ms": 0, "detections": detections}
 
 @app.get("/api/detections")
 def list_detections() -> list[dict]: return list(DETECTIONS.values())
@@ -92,4 +136,4 @@ def report_csv() -> StreamingResponse:
 
 @app.get("/api/model")
 def model() -> dict:
-    return {"name": "Sonaris Demo Detector", "version": "0.2", "mode": "DEMO_SYNTHETIC", "evaluation": "Not evaluated yet", "supported_classes": ["Unknown Anomaly (demo only)"], "note": "A YOLO adapter will replace this only when validated local weights are supplied."}
+    return {"name": detector.model_name, "version": "1.0", "mode": detector.inference_mode, "models_loaded": len(detector.yolo_models), "supported_classes": ["Shipwreck", "Crab-Pot", "Marine Debris", "Subsea Cable / Pipe"], "note": f"Running {len(detector.yolo_models)} YOLO model(s)" if detector.yolo_models else "Heuristic fallback mode"}
